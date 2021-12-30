@@ -1,0 +1,3 @@
+#!/bin/sh
+docker build --target daemon -t bitcoin:daemon .
+docker build --target cli -t bitcoin:cli .
