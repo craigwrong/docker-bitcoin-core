@@ -31,7 +31,7 @@ COPY --from=builder /usr/local/bin/bitcoind /usr/local/bin/bitcoind
 VOLUME /root/.bitcoin
 ENTRYPOINT ["/usr/local/bin/bitcoind"]
 
-FROM alpine as wallet-daemon
+FROM alpine as daemon-wallet
 RUN apk --update upgrade && apk add boost libevent
 COPY --from=builder-wallet /usr/local/bin/bitcoind /usr/local/bin/bitcoind
 VOLUME /root/.bitcoin
@@ -43,7 +43,7 @@ COPY --from=builder /usr/local/bin/bitcoin-cli /usr/local/bin/bitcoin-cli
 VOLUME /root/.cookie
 ENTRYPOINT ["/usr/local/bin/bitcoin-cli"]
 
-FROM alpine as wallet-cli
+FROM alpine as wallet
 RUN apk --update upgrade && apk add boost
 # RUN apk --update upgrade && apk add boost sqlite-libs
 COPY --from=builder-wallet /usr/local/bin/bitcoin-wallet /usr/local/bin/bitcoin-wallet
