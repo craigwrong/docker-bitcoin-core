@@ -2,8 +2,8 @@
 FROM alpine as prep
 RUN apk --update upgrade && apk add autoconf automake libtool pkgconfig
 WORKDIR /opt
-RUN wget -qO- https://bitcoincore.org/bin/bitcoin-core-22.0/bitcoin-22.0.tar.gz | tar xzf - && \
-    mv bitcoin-22.0 bitcoin && \
+RUN wget -qO- https://bitcoincore.org/bin/bitcoin-core-23.0/bitcoin-23.0.tar.gz | tar xzf - && \
+    mv bitcoin-23.0 bitcoin && \
     cd bitcoin && \
     ./autogen.sh
 
