@@ -26,9 +26,14 @@ RUN ./configure --with-wallet --with-sqlite --without-bdb --without-gui --withou
     make install
 
 FROM alpine as daemon
+ARG UNAME=bitcoin
+ARG UID=1000
+ARG GID=1000
+RUN addgroup -g $GID $UNAME && adduser -D -u $UID -G $UNAME $UNAME
 RUN apk --update upgrade && apk add boost libevent
 COPY --from=builder /usr/local/bin/bitcoind /usr/local/bin/bitcoind
-VOLUME /root/.bitcoin
+USER $UNAME
+VOLUME /home/$UNAME/.bitcoin
 ENTRYPOINT ["/usr/local/bin/bitcoind"]
 
 FROM alpine as daemon-wallet
