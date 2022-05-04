@@ -20,9 +20,15 @@ Sample `bitcoin.conf` file.
 
 User `docker network inspect bridge` to get the IP subnetwork – in this case `172.17.0.0/16`.
 
-To run a daemon.
+To run a daemon (using macOS and root on Docker):
 
     docker run --name bitcoind --rm -d -v "$HOME/Library/Application Support/Bitcoin":/root/.bitcoin bitcoind
+
+Or on linux (using current directory, dedicated bitcoin user on Docker and an external drive for blockchain):
+
+    docker run --name bitcoind --rm -d -v $PWD:/home/bitcoin/.bitcoin -v /media/BLOCKCHAIN:/media/BLOCKCHAIN bitcoind
+
+To detach (when run with `-it`) use `Ctrl-p Ctrl-q`.
 
 Check the logs.
 
