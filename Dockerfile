@@ -16,6 +16,24 @@ RUN ./configure --without-wallet --without-sqlite --without-bdb --without-gui --
         --enable-daemon --enable-util-cli --disable-util-tx --disable-util-wallet --disable-util-util && \
     make install
 
+FROM alpine as builder-depends
+RUN apk --update upgrade && apk add make g++ curl bash
+COPY --from=prep /opt/bitcoin /opt/bitcoin
+WORKDIR /opt/bitcoin/depends
+RUN make NO_QT=1 NO_QR=1 NO_ZMQ=1 NO_WALLET=1 NO_BDB=1 NO_SQLITE=1 NO_UPNP=1 NO_NATPMP=1 NO_USDT=1
+
+FROM alpine as builder-static
+RUN apk --update upgrade && apk add pkgconfig make g++
+COPY --from=builder-depends /opt/bitcoin /opt/bitcoin
+WORKDIR /opt/bitcoin
+# --enable-glibc-back-compat
+RUN LDFLAGS="-static-libstdc++" ./configure \
+        --prefix=`pwd`/depends/x86_64-pc-linux-musl \
+        --without-wallet --without-sqlite --without-bdb --without-gui --without-libs \
+        --disable-tests --disable-bench --disable-external-signer \
+        --enable-daemon --enable-util-cli --disable-util-tx --disable-util-wallet --disable-util-util && \
+    make install
+
 FROM alpine as builder-wallet
 RUN apk --update upgrade && apk add boost-dev libevent-dev sqlite-dev pkgconfig make g++
 COPY --from=prep /opt/bitcoin /opt/bitcoin
@@ -32,6 +50,17 @@ ARG GID=1000
 RUN addgroup -g $GID $UNAME && adduser -D -u $UID -G $UNAME $UNAME
 RUN apk --update upgrade && apk add boost libevent
 COPY --from=builder /usr/local/bin/bitcoind /usr/local/bin/bitcoind
+USER $UNAME
+VOLUME /home/$UNAME/.bitcoin
+ENTRYPOINT ["/usr/local/bin/bitcoind"]
+
+FROM alpine as daemon-static
+ARG UNAME=bitcoin
+ARG UID=1000
+ARG GID=1000
+RUN addgroup -g $GID $UNAME && adduser -D -u $UID -G $UNAME $UNAME
+RUN apk --update upgrade && apk add libgcc
+COPY --from=builder-static /opt/bitcoin/depends/x86_64-pc-linux-musl/bin/bitcoind /usr/local/bin/bitcoind
 USER $UNAME
 VOLUME /home/$UNAME/.bitcoin
 ENTRYPOINT ["/usr/local/bin/bitcoind"]
