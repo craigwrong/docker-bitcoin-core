@@ -8,8 +8,13 @@
 # docker cp bitcoin-arm64-builder:/opt/bitcoin/depends/aarch64-linux-musl bitcoin-arm64
 # docker stop bitcoin-arm64-builder
 #
+# Part 2b: Extract the required ARM 64 LD, GCC and C++ libraries to the host filesystem
+# docker buildx build --target daemon-deps -t bitcoin-deps-arm64 -f Dockerfile.arm64 --platform linux/arm64 .
+# mkdir lib-arm64
+# docker run --platform linux/arm64 --rm -it -v $PWD/lib-arm64:/export bitcoin-deps-arm64 /bin/sh -c "cp /lib/ld-musl-aarch64.so.1 /export && cp /usr/lib/libgcc_s.so.1 /export && cp /usr/lib/libstdc++.so.6 /export"
+#
 # Part 3: Generate an arm64 docker image containing the compiled binaries
-# docker buildx build --target daemon -t bitcoin-arm64 -f Dockerfile.arm64 --platform linux/arm64 .
+# docker buildx build --platform linux/arm64 --target daemon -t bitcoin-arm64 -f Dockerfile.arm64 .
 #
 # Part 4: Export the image and transfer to ARM host
 # docker save bitcoin-arm64 | gzip > docker-bitcoin-arm64.tar.gz
@@ -62,14 +67,18 @@ RUN LDFLAGS="-static-libstdc++" ./configure \
         --enable-daemon --enable-util-cli --disable-util-tx --disable-util-wallet --disable-util-util && \
     make install
 
-FROM alpine as daemon
+FROM alpine as daemon-deps
+RUN apk --update upgrade && apk add libstdc++
+VOLUME /export
+
+FROM scratch as daemon
 ARG UNAME=bitcoin
 ARG UID=1000
 ARG GID=1000
-RUN addgroup -g $GID $UNAME && adduser -D -u $UID -G $UNAME $UNAME
-RUN apk --update upgrade && apk add libstdc++
-COPY bitcoin-arm64/bin/bitcoind /usr/local/bin/bitcoind
+#RUN addgroup -g $GID $UNAME && adduser -D -u $UID -G $UNAME $UNAME
+COPY bitcoin-arm64/bin/bitcoind /bin/bitcoind
+COPY lib-arm64 /lib
 USER $UNAME
 VOLUME /home/$UNAME/.bitcoin
-ENTRYPOINT ["/usr/local/bin/bitcoind"]
+ENTRYPOINT ["/bin/bitcoind"]
 
