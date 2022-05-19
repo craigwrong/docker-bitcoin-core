@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# Part 1: Cross-compile bitcoin core daemon on amd64 targetting arm64 (gnu-linux)
+# Part 1: Cross-compile bitcoin core daemon on amd64 targetting arm64 (linux-musl)
 # docker build --target builder -t bitcoin-arm64-builder -f Dockerfile.arm64 .
 #
 # Part 2: Extract the built binaries to the host filesystem
@@ -9,7 +9,11 @@
 # docker stop bitcoin-arm64-builder
 #
 # Part 2b: Extract the required ARM 64 LD, GCC and C++ libraries to the host filesystem
+# docker buildx build --target daemon-deps -t bitcoin-deps-arm64 -f Dockerfile.arm64 --platform linux/arm64 .
 # mkdir lib-arm64
+# docker run --platform linux/arm64 --rm -it -v $PWD/lib-arm64:/export bitcoin-deps-arm64 /bin/sh -c "cp /lib/ld-musl-aarch64.so.1 /export && cp /usr/lib/libgcc_s.so.1 /export && cp /usr/lib/libstdc++.so.6 /export"
+
+# Debian:
 # docker run --platform linux/arm64 --rm -it -v $PWD/lib-arm64:/export debian /bin/bash -c "cp /lib/aarch64-linux-gnu/libpthread.so.0 /export && cp /lib/aarch64-linux-gnu/libm.so.6 /export && cp /lib/aarch64-linux-gnu/libgcc_s.so.1 /export && cp /lib/aarch64-linux-gnu/libc.so.6 /export && cp /lib/ld-linux-aarch64.so.1 /export"
 #
 # Part 3: Generate an arm64 docker image containing the compiled binaries
@@ -18,49 +22,65 @@
 # Part 4: Export the image and transfer to ARM host
 # docker save bitcoin-arm64 | gzip > docker-bitcoin-arm64.tar.gz
 # scp docker-bitcoin-arm64.tar.gz ubuntu@raspberrypi:/home/ubuntu
-#
+# 
 # Part 5: Import image on host
 # ssh ubuntu@raspberrypi
 # docker load < docker-bitcoin-arm64.tar.gz
 # docker run --rm bitcoind
 
-FROM debian as prep
-RUN apt --update upgrade && apt install --no-install-recommends --yes wget autoconf automake pkg-config libtool
+FROM alpine as prep
+RUN apk --update upgrade && apk add autoconf automake libtool pkgconfig
 WORKDIR /opt
 RUN wget -qO- https://bitcoincore.org/bin/bitcoin-core-23.0/bitcoin-23.0.tar.gz | tar xzf - && \
     mv bitcoin-23.0 bitcoin && \
     cd bitcoin && \
     ./autogen.sh
 
-FROM debian as builder-base
-RUN apt update && apt upgrade && apt install --yes --no-install-recommends make g++-aarch64-linux-gnu binutils-aarch64-linux-gnu
+FROM alpine as builder-base
+RUN apk --update upgrade && apk add --no-cache git make patch file texinfo g++
+WORKDIR /opt
+RUN git clone https://github.com/richfelker/musl-cross-make
+WORKDIR /opt/musl-cross-make
+RUN TARGET=aarch64-linux-musl OUTPUT=/usr/local make install
+WORKDIR /
+RUN apk del git patch
 
-FROM builder-base as builder-depends
+FROM alpine as builder-depends
+COPY --from=builder-base /opt/musl-cross-make/output /usr/local
 COPY --from=prep /opt/bitcoin /opt/bitcoin
-RUN apt update && apt upgrade && apt install --yes --no-install-recommends curl ca-certificates lbzip2
+RUN apk --update upgrade && apk add make curl bash
 WORKDIR /opt/bitcoin/depends
-RUN make HOST=aarch64-linux-gnu NO_QT=1 NO_QR=1 NO_ZMQ=1 NO_WALLET=1 NO_BDB=1 NO_SQLITE=1 NO_UPNP=1 NO_NATPMP=1 NO_USDT=1
+RUN make HOST=aarch64-linux-musl NO_QT=1 NO_QR=1 NO_ZMQ=1 NO_WALLET=1 NO_BDB=1 NO_SQLITE=1 NO_UPNP=1 NO_NATPMP=1 NO_USDT=1
 
-FROM builder-base as builder
-COPY --from=prep /opt/bitcoin /opt/bitcoin
-COPY --from=builder-depends /opt/bitcoin/depends/aarch64-linux-gnu /opt/bitcoin/depends/aarch64-linux-gnu
-RUN apt install --yes --no-install-recommends pkg-config
+# sudo apt-get install make automake cmake curl g++-multilib libtool binutils-gold bsdmainutils pkg-config python3 patch bison
+# apk add make automake cmake curl libtool binutils-gold pk
+# ?? gconfig python3 patch bison
+# sudo apt-get install g++-aarch64-linux-gnu binutils-aarch64-linux-gnu
+# apk add --arch aarch64 g++ binutils
+
+FROM alpine as builder
+COPY --from=builder-base /opt/musl-cross-make/output /usr/local
+COPY --from=builder-depends /opt/bitcoin /opt/bitcoin
+RUN apk --update upgrade && apk add pkgconfig make
 WORKDIR /opt/bitcoin
 RUN LDFLAGS="-static-libstdc++" ./configure \
-        --prefix=`pwd`/depends/aarch64-linux-gnu \
+        --prefix=`pwd`/depends/aarch64-linux-musl \
         --without-wallet --without-sqlite --without-bdb --without-gui --without-libs \
         --disable-tests --disable-bench --disable-external-signer \
         --enable-daemon --enable-util-cli --disable-util-tx --disable-util-wallet --disable-util-util && \
     make install
 
+FROM alpine as daemon-deps
+RUN apk --update upgrade && apk add libstdc++
+VOLUME /export
+
 FROM scratch as daemon
+ARG UNAME=bitcoin
+ARG UID=1000
+ARG GID=1000
+#RUN addgroup -g $GID $UNAME && adduser -D -u $UID -G $UNAME $UNAME
 COPY bitcoin-arm64/bin/bitcoind /bin/bitcoind
 COPY lib-arm64 /lib
-VOLUME /.bitcoin
+USER $UNAME
+VOLUME /home/$UNAME/.bitcoin
 ENTRYPOINT ["/bin/bitcoind"]
-
-FROM scratch as cli
-COPY bitcoin-arm64/bin/bitcoin-cli /bin/bitcoin-cli
-COPY lib-arm64 /lib
-VOLUME /.bitcoin
-ENTRYPOINT ["/bin/bitcoin-cli"]
