@@ -4,9 +4,8 @@
 # docker build --target builder -t bitcoin-arm64-builder -f Dockerfile.arm64 .
 #
 # Part 2: Extract the built binaries to the host filesystem
-# docker run --rm --name bitcoin-arm64-builder -d bitcoin-arm64-builder tail -f /dev/null
-# docker cp bitcoin-arm64-builder:/opt/bitcoin/depends/aarch64-linux-musl bitcoin-arm64
-# docker stop bitcoin-arm64-builder
+# mkdir bitcoin-arm64
+# docker run --rm -it -v $PWD/bitcoin-arm64:/export bitcoin-arm64-builder /bin/bash -c "cp -R /opt/bitcoin/depends/aarch64-linux-gnu/* /export"
 #
 # Part 2b: Extract the required ARM 64 LD, GCC and C++ libraries to the host filesystem
 # mkdir lib-arm64
@@ -25,7 +24,7 @@
 # docker run --rm bitcoind
 
 FROM debian as prep
-RUN apt --update upgrade && apt install --no-install-recommends --yes wget autoconf automake pkg-config libtool
+RUN apt update && apt -y upgrade && apt install --no-install-recommends --yes wget ca-certificates autoconf automake pkg-config libtool
 WORKDIR /opt
 RUN wget -qO- https://bitcoincore.org/bin/bitcoin-core-23.0/bitcoin-23.0.tar.gz | tar xzf - && \
     mv bitcoin-23.0 bitcoin && \
@@ -33,11 +32,11 @@ RUN wget -qO- https://bitcoincore.org/bin/bitcoin-core-23.0/bitcoin-23.0.tar.gz 
     ./autogen.sh
 
 FROM debian as builder-base
-RUN apt update && apt upgrade && apt install --yes --no-install-recommends make g++-aarch64-linux-gnu binutils-aarch64-linux-gnu
+RUN apt update && apt -y upgrade && apt install --yes --no-install-recommends make g++-aarch64-linux-gnu binutils-aarch64-linux-gnu
 
 FROM builder-base as builder-depends
 COPY --from=prep /opt/bitcoin /opt/bitcoin
-RUN apt update && apt upgrade && apt install --yes --no-install-recommends curl ca-certificates lbzip2
+RUN apt install --yes --no-install-recommends curl ca-certificates lbzip2
 WORKDIR /opt/bitcoin/depends
 RUN make HOST=aarch64-linux-gnu NO_QT=1 NO_QR=1 NO_ZMQ=1 NO_WALLET=1 NO_BDB=1 NO_SQLITE=1 NO_UPNP=1 NO_NATPMP=1 NO_USDT=1
 
