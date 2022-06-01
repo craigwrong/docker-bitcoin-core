@@ -1,3 +1,6 @@
 .DS_Store
 /.gitconfig/user
 xcuserdata/
+/sandbox/sample.bitcoin/regtest
+/temporary/*
+!/temporary/.keep
