@@ -2,9 +2,10 @@
 
 Note: For these examples we are using macOS as host even though the binaries are compiled for Linux (Docker). On Linux hosts replace `$HOME/Library/Application Support/Bitcoin` with `$HOME/.bitcoin` or wherever the data directory is.
 
-To build all images from source.
+To build the default images use `./build` or manually run:
 
-    ./build
+    docker build --target daemon -t bitcoind .
+    docker build --target cli -t bitcoin-cli .
 
 Sample `bitcoin.conf` file.
 

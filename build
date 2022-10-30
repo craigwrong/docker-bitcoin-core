@@ -1,5 +1,3 @@
 #!/bin/sh
-docker build --target daemon -t bitcoind-nowallet .
+docker build --target daemon -t bitcoind .
 docker build --target cli -t bitcoin-cli .
-docker build --target daemon-wallet -t bitcoind .
-docker build --target wallet -t bitcoin-wallet .
